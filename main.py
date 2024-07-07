@@ -2,6 +2,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.datasets import load_digits
 from sklearn.model_selection import train_test_split
+import joblib
 
 import torch
 from torch import nn
@@ -12,47 +13,42 @@ from torchvision.transforms import ToTensor
 import matplotlib.pyplot as plt
 
 
-def resultAnalysis(result, test_y):
-    misclassified_indices = [i for i in range(len(result)) if result[i] != test_y[i]]
+def sklearnMLP(training=True):
+    """         SIMPLER DATASET OF 8X8 HANDWRITTEN DIGITS BUILT IN SKLEANR
+    data = load_digits(n_class=10, return_X_y=False, as_frame=False)
+    X = list(zip(data['data'], data['images']))
+    y = data.target
 
-    print("scikit-learn MLPClassifier accuracy: ", accuracy_score(result, test_y))
-    print("misclassified: ", len(misclassified_indices), " out of: ", len(test_y))
-
-
-def sklearnMLP():
-    """ SIMPLER DATASET OF 8X8 HANDWRITTEN DIGITS BUILT IN SKLEANR
-        data = load_digits(n_class=10, return_X_y=False, as_frame=False)
-        X = list(zip(data['data'], data['images']))
-        y = data.target
-
-        train_x, test_x, train_y, test_y = train_test_split(X, y, test_size=0.1, random_state=1)
-        train_x_data = [item[0] for item in train_x]
-        train_x_images = [item[1] for item in train_x]
-        test_x_data = [item[0] for item in test_x]
-        test_x_images = [item[1] for item in test_x]
-        """
+    train_x, test_x, train_y, test_y = train_test_split(X, y, test_size=0.1, random_state=1)
+    train_x_data = [item[0] for item in train_x]
+    train_x_images = [item[1] for item in train_x]
+    test_x_data = [item[0] for item in test_x]
+    test_x_images = [item[1] for item in test_x]
+    """
 
     train_data = datasets.MNIST(root='data', train=True, download=True, transform=ToTensor(), )
     test_data = datasets.MNIST(root='data', train=False, download=True, transform=ToTensor(), )
-    batch_size = 64
     train_dataloader = DataLoader(train_data, batch_size=len(train_data))
     test_dataloader = DataLoader(train_data, batch_size=len(test_data))
     X, y = next(iter(train_dataloader))
-    x_train_numpy = X.numpy()
-    y_train_numpy = y.numpy()
-    x_train_numpy = [item.flatten() for item in x_train_numpy]
+    x_train = X.numpy()
+    y_train = y.numpy()
+    x_train = [item.flatten() for item in x_train]
     X_t, y_t = next(iter(test_dataloader))
-    x_test_numpy = X_t.numpy()
-    y_test_numpy = y_t.numpy()
-    x_test_numpy = [item.flatten() for item in x_test_numpy]
+    x_test = X_t.numpy()
+    y_test = y_t.numpy()
+    x_test = [item.flatten() for item in x_test]
 
-    clf = MLPClassifier(solver='sgd', alpha=1e-5, hidden_layer_sizes=(16, 16), batch_size=batch_size,
-                        max_iter=5)
+    # reset default parameters for better comparison with other implementations
+    clf = MLPClassifier(solver='sgd', alpha=0, hidden_layer_sizes=(16, 16), batch_size=64,
+                        learning_rate_init=0.01, max_iter=5, shuffle=False, verbose=True, momentum=0)
 
-    clf.fit(x_train_numpy, y_train_numpy)
-    result = clf.predict(x_test_numpy)
-
-    resultAnalysis(result, y_test_numpy)
+    if training:
+        clf.fit(x_train, y_train)
+        joblib.dump(clf, "sklearn_model.pkl")
+    else:
+        clf = joblib.load("sklearn_model.pkl")
+    print(f'sklearnMLP accuracy: {clf.score(x_test, y_test)}')
 
 
 def pytorchMLP(training=True):
@@ -61,11 +57,11 @@ def pytorchMLP(training=True):
             super().__init__()
             self.flatten = nn.Flatten()
             self.linear_relu_stack = nn.Sequential(
-                nn.Linear(28 * 28, 512),
+                nn.Linear(28 * 28, 16),
                 nn.ReLU(),
-                nn.Linear(512, 512),
+                nn.Linear(16, 16),
                 nn.ReLU(),
-                nn.Linear(512, 10)
+                nn.Linear(16, 10)
             )
 
         def forward(self, x):
@@ -111,28 +107,25 @@ def pytorchMLP(training=True):
     train_dataloader = DataLoader(train_data, batch_size=batch_size)
     test_dataloader = DataLoader(train_data, batch_size=batch_size)
 
-    for X, y in train_dataloader:
-        print(f"Shape of X [N, C, H, W]: {X.shape}")
-        print(f"Shape of y: {y.shape} {y.dtype}")
-        break
-
     model = NeuralNetwork().to("cpu")
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
     if training:
         epochs = 5
         for t in range(epochs):
             print(f"Epoch {t + 1}\n-------------------------------")
             train(train_dataloader, model, loss_fn, optimizer)
-            test(test_dataloader, model, loss_fn)
+            # test(test_dataloader, model, loss_fn)
         print("Done!")
-
-        torch.save(model.state_dict(), "model.pth")
-        print("Saved PyTorch Model State to model.pth")
+        test(test_dataloader, model, loss_fn)
+        torch.save(model.state_dict(), "pytorch_model.pth")
+        print("Saved PyTorch Model State to pytorch_model.pth")
     else:
         model = NeuralNetwork().to("cpu")
-        model.load_state_dict(torch.load("model.pth"))
+        model.load_state_dict(torch.load("pytorch_model.pth"))
+
+        test(test_dataloader, model, loss_fn)
 
         classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
@@ -142,12 +135,12 @@ def pytorchMLP(training=True):
             x = x.to("cpu")
             pred = model(x)
             predicted, actual = classes[pred[0].argmax(0)], classes[y]
-            print(f'Predicted: "{predicted}", Actual: "{actual}"')
+            print(f'First predicted element: "{predicted}", Actual: "{actual}"')
             img = x.squeeze()
             plt.imshow(img, cmap="gray")
             plt.show()
-            test(test_dataloader, model, loss_fn)
+
 
 if __name__ == '__main__':
-    sklearnMLP()
-    # pytorchMLP(training=False)
+    sklearnMLP(training=False)
+    pytorchMLP(training=False)
