@@ -11,9 +11,10 @@ from torchvision import datasets
 from torchvision.transforms import ToTensor
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 
-def sklearnMLP(training=True):
+def sklearnMLP(x_train, y_train, x_test, y_test, training=True):
     """         SIMPLER DATASET OF 8X8 HANDWRITTEN DIGITS BUILT IN SKLEANR
     data = load_digits(n_class=10, return_X_y=False, as_frame=False)
     X = list(zip(data['data'], data['images']))
@@ -25,19 +26,6 @@ def sklearnMLP(training=True):
     test_x_data = [item[0] for item in test_x]
     test_x_images = [item[1] for item in test_x]
     """
-
-    train_data = datasets.MNIST(root='data', train=True, download=True, transform=ToTensor(), )
-    test_data = datasets.MNIST(root='data', train=False, download=True, transform=ToTensor(), )
-    train_dataloader = DataLoader(train_data, batch_size=len(train_data))
-    test_dataloader = DataLoader(train_data, batch_size=len(test_data))
-    X, y = next(iter(train_dataloader))
-    x_train = X.numpy()
-    y_train = y.numpy()
-    x_train = [item.flatten() for item in x_train]
-    X_t, y_t = next(iter(test_dataloader))
-    x_test = X_t.numpy()
-    y_test = y_t.numpy()
-    x_test = [item.flatten() for item in x_test]
 
     # reset default parameters for better comparison with other implementations
     clf = MLPClassifier(solver='sgd', alpha=0, hidden_layer_sizes=(16, 16), batch_size=64,
@@ -51,7 +39,7 @@ def sklearnMLP(training=True):
     print(f'sklearnMLP accuracy: {clf.score(x_test, y_test)}')
 
 
-def pytorchMLP(training=True):
+def pytorchMLP(train_dataloader, test_dataloader, training=True):
     class NeuralNetwork(nn.Module):
         def __init__(self):
             super().__init__()
@@ -101,12 +89,6 @@ def pytorchMLP(training=True):
         correct /= size
         print(f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
-    train_data = datasets.MNIST(root='data', train=True, download=True, transform=ToTensor(),)
-    test_data = datasets.MNIST(root='data', train=False, download=True, transform=ToTensor(),)
-    batch_size = 64
-    train_dataloader = DataLoader(train_data, batch_size=batch_size)
-    test_dataloader = DataLoader(train_data, batch_size=batch_size)
-
     model = NeuralNetwork().to("cpu")
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
@@ -141,6 +123,72 @@ def pytorchMLP(training=True):
             plt.show()
 
 
+def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
+    def relu(x):
+        return [max(0, x_i) for x_i in x]
+
+    def relu_dir(x):
+        return np.where(x > 0, 1, 0)
+
+    def mse(x, y):
+        return 0.5*sum([item**2 for item in np.subtract(x, y)])
+
+    def crossEntrpyLoss(x, y):
+        return -sum([y_i*np.log(x_i) for x_i, y_i in (x, y)])
+
+
+    class Model:
+        def __init__(self):
+            self.layers = (5, 16, 16, 10)
+            self.weights = [np.random.rand(self.layers[i], self.layers[i + 1]) for i in range(len(self.layers) - 1)]
+            self.bias = [np.random.rand(self.layers[i + 1]) for i in range(len(self.layers) - 1)]
+            self.neuron_values = [np.zeros(i) for i in self.layers]
+            self.pre_activation_values = [np.zeros(i) for i in self.layers]
+            self.lr = 0.01
+
+        def backprop(self, pred, y):
+            delta3 = (pred - y)*relu_dir(self.pre_activation_values[3]) #pred to to samo co ostatnie wyjscie
+            dcdw3 = delta3@self.neuron_values[2].T
+
+            delta2 = delta3 @ self.weights[2].T * relu_dir(self.pre_activation_values[2])
+            dcdw2 = delta3@self.neuron_values[1].T
+
+            #update weights
+            self.weights[3] -= dcdw3*self.lr
+            self.weights[2] -= dcdw2 * self.lr
+
+        def forward(self, x):
+            self.neuron_values[0] = x
+            for i in range(len(self.weights)):
+                self.pre_activation_values[i+1] = self.neuron_values[i] @ self.weights[i] + self.bias[i]
+                self.neuron_values[i+1] = relu(self.pre_activation_values)
+            return self.neuron_values[-1]
+
+    model = Model()
+    data = np.random.rand(5)
+    result = model.forward(data)
+    print(result)
+    print("end")
+
+
 if __name__ == '__main__':
-    sklearnMLP(training=False)
-    pytorchMLP(training=False)
+    train_data = datasets.MNIST(root='data', train=True, download=True, transform=ToTensor(), )
+    test_data = datasets.MNIST(root='data', train=False, download=True, transform=ToTensor(), )
+    train_dataloader = DataLoader(train_data, batch_size=len(train_data))
+    test_dataloader = DataLoader(train_data, batch_size=len(test_data))
+    X, y = next(iter(train_dataloader))
+    x_train_np = X.numpy()
+    y_train_np = y.numpy()
+    x_train_np = [item.flatten() for item in x_train_np]
+    X_t, y_t = next(iter(test_dataloader))
+    x_test_np = X_t.numpy()
+    y_test_np = y_t.numpy()
+    x_test_np = [item.flatten() for item in x_test_np]
+
+    batch_size = 64
+    train_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
+    test_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
+
+    # sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
+    # pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=True)
+    fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
