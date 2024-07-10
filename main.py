@@ -40,6 +40,16 @@ def sklearnMLP(x_train, y_train, x_test, y_test, training=True):
 
 
 def pytorchMLP(train_dataloader, test_dataloader, training=True):
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
+
+    print(device)
+
     class NeuralNetwork(nn.Module):
         def __init__(self):
             super().__init__()
@@ -61,7 +71,7 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
         size = len(dataloader.dataset)
         model.train()
         for batch, (X, y) in enumerate(dataloader):
-            X, y = X.to("cpu"), y.to("cpu")
+            X, y = X.to(device), y.to(device)
 
             pred = model(X)
             loss = loss_fn(pred, y)
@@ -81,7 +91,7 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
         test_loss, correct = 0, 0
         with torch.no_grad():
             for X, y in dataloader:
-                X, y = X.to("cpu"), y.to("cpu")
+                X, y = X.to(device), y.to(device)
                 pred = model(X)
                 test_loss += loss_fn(pred, y).item()
                 correct += (pred.argmax(1) == y).type(torch.float).sum().item()
@@ -89,7 +99,7 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
         correct /= size
         print(f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
-    model = NeuralNetwork().to("cpu")
+    model = NeuralNetwork().to(device)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
@@ -104,7 +114,7 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
         torch.save(model.state_dict(), "pytorch_model.pth")
         print("Saved PyTorch Model State to pytorch_model.pth")
     else:
-        model = NeuralNetwork().to("cpu")
+        model = NeuralNetwork().to(device)
         model.load_state_dict(torch.load("pytorch_model.pth"))
 
         test(test_dataloader, model, loss_fn)
@@ -114,7 +124,7 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
         model.eval()
         x, y = test_data[0][0], test_data[0][1]
         with torch.no_grad():
-            x = x.to("cpu")
+            x = x.to(device)
             pred = model(x)
             predicted, actual = classes[pred[0].argmax(0)], classes[y]
             print(f'First predicted element: "{predicted}", Actual: "{actual}"')
@@ -147,25 +157,28 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
             self.lr = 0.01
 
         def backprop(self, pred, y):
-            delta3 = (pred - y)*relu_dir(self.pre_activation_values[3]) #pred to to samo co ostatnie wyjscie
-            dcdw3 = delta3@self.neuron_values[2].T
+            dcdw = [0] * len(self.weights)
+            delta = (pred - y)*relu_dir(self.pre_activation_values[-1])
+            for i in range(1, len(self.layers)):
+                dcdw[-i] = np.outer(self.neuron_values[-(i+1)], delta)
+                delta = delta @ np.array(self.weights[-i]).T * relu_dir(self.pre_activation_values[-(i+1)])
 
-            delta2 = delta3 @ self.weights[2].T * relu_dir(self.pre_activation_values[2])
-            dcdw2 = delta3@self.neuron_values[1].T
-
-            #update weights
-            self.weights[3] -= dcdw3*self.lr
-            self.weights[2] -= dcdw2 * self.lr
+            for i in range(len(self.weights)):
+                self.weights[i] -= dcdw[i]*self.lr
 
         def forward(self, x):
             self.neuron_values[0] = x
             for i in range(len(self.weights)):
                 self.pre_activation_values[i+1] = self.neuron_values[i] @ self.weights[i] + self.bias[i]
-                self.neuron_values[i+1] = relu(self.pre_activation_values)
+                self.neuron_values[i+1] = relu(self.pre_activation_values[i+1])
             return self.neuron_values[-1]
 
     model = Model()
     data = np.random.rand(5)
+    correct = np.random.rand(10)
+    correct[1] = 100
+    for _ in range(100):
+        model.backprop(model.forward(data), correct)
     result = model.forward(data)
     print(result)
     print("end")
