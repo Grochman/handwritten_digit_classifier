@@ -1,7 +1,4 @@
 from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import accuracy_score
-from sklearn.datasets import load_digits
-from sklearn.model_selection import train_test_split
 import joblib
 
 import torch
@@ -15,18 +12,6 @@ import numpy as np
 
 
 def sklearnMLP(x_train, y_train, x_test, y_test, training=True):
-    """         SIMPLER DATASET OF 8X8 HANDWRITTEN DIGITS BUILT IN SKLEANR
-    data = load_digits(n_class=10, return_X_y=False, as_frame=False)
-    X = list(zip(data['data'], data['images']))
-    y = data.target
-
-    train_x, test_x, train_y, test_y = train_test_split(X, y, test_size=0.1, random_state=1)
-    train_x_data = [item[0] for item in train_x]
-    train_x_images = [item[1] for item in train_x]
-    test_x_data = [item[0] for item in test_x]
-    test_x_images = [item[1] for item in test_x]
-    """
-
     # reset default parameters for better comparison with other implementations
     clf = MLPClassifier(solver='sgd', alpha=0, hidden_layer_sizes=(16, 16), batch_size=64,
                         learning_rate_init=0.01, max_iter=5, shuffle=False, verbose=True, momentum=0)
@@ -141,30 +126,32 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
         return np.where(x > 0, 1, 0)
 
     def mse(x, y):
-        return 0.5*sum([item**2 for item in np.subtract(x, y)])
+        return 0.5*np.sum((x-y)**2)
 
     def crossEntrpyLoss(x, y):
-        return -sum([y_i*np.log(x_i) for x_i, y_i in (x, y)])
-
+        return -np.sum(y * np.log(x + 1e-8))
 
     class Model:
         def __init__(self):
-            self.layers = (5, 16, 16, 10)
+            self.layers = (28*28, 16, 16, 10)
             self.weights = [np.random.rand(self.layers[i], self.layers[i + 1]) for i in range(len(self.layers) - 1)]
-            self.bias = [np.random.rand(self.layers[i + 1]) for i in range(len(self.layers) - 1)]
+            self.bias = [np.zeros(self.layers[i + 1]) for i in range(len(self.layers) - 1)]
             self.neuron_values = [np.zeros(i) for i in self.layers]
             self.pre_activation_values = [np.zeros(i) for i in self.layers]
             self.lr = 0.01
 
         def backprop(self, pred, y):
             dcdw = [0] * len(self.weights)
-            delta = (pred - y)*relu_dir(self.pre_activation_values[-1])
-            for i in range(1, len(self.layers)):
-                dcdw[-i] = np.outer(self.neuron_values[-(i+1)], delta)
-                delta = delta @ np.array(self.weights[-i]).T * relu_dir(self.pre_activation_values[-(i+1)])
+            delta = [0] * (len(self.bias)+1)
+            delta[-1] = (pred - y)*relu_dir(self.pre_activation_values[-1])
+
+            for i in range(len(self.weights) - 1, -1, -1):
+                dcdw[i] = np.outer(self.pre_activation_values[i], delta[i+1])
+                delta[i] = (delta[i+1] @ np.array(self.weights[i]).T) * relu_dir(self.pre_activation_values[i])
 
             for i in range(len(self.weights)):
                 self.weights[i] -= dcdw[i]*self.lr
+                self.bias[i] -= delta[i+1]*self.lr
 
         def forward(self, x):
             self.neuron_values[0] = x
@@ -173,18 +160,27 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
                 self.neuron_values[i+1] = relu(self.pre_activation_values[i+1])
             return self.neuron_values[-1]
 
+        def train(self, x, y):
+            for i in range(len(x)):
+                self.backprop(self.forward(x[i]), y[i])
+
     model = Model()
-    data = np.random.rand(5)
-    correct = np.random.rand(10)
-    correct[1] = 100
-    for _ in range(100):
-        model.backprop(model.forward(data), correct)
-    result = model.forward(data)
-    print(result)
-    print("end")
+
+    model_wb = torch.load("pytorch_model.pth")
+    numpy_arrays = [tensor.numpy() for tensor in model_wb.values()]
+    model.weights[0] = numpy_arrays[0].T
+    model.weights[1] = numpy_arrays[2].T
+    model.weights[2] = numpy_arrays[4].T
+    model.bias[0] = numpy_arrays[1]
+    model.bias[1] = numpy_arrays[3]
+    model.bias[2] = numpy_arrays[5]
+
+    for i in range(len(x_test)):
+        print(model.forward(x_test[i]), " ", y_test[i])
 
 
 if __name__ == '__main__':
+
     train_data = datasets.MNIST(root='data', train=True, download=True, transform=ToTensor(), )
     test_data = datasets.MNIST(root='data', train=False, download=True, transform=ToTensor(), )
     train_dataloader = DataLoader(train_data, batch_size=len(train_data))
