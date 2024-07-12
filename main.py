@@ -9,7 +9,8 @@ from torchvision.transforms import ToTensor
 
 import matplotlib.pyplot as plt
 import numpy as np
-
+import pandas as pd
+import math
 
 def sklearnMLP(x_train, y_train, x_test, y_test, training=True):
     # reset default parameters for better comparison with other implementations
@@ -119,68 +120,91 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
 
 
 def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
+    def load_weights(model):
+        model_wb = torch.load("pytorch_model.pth")
+        numpy_arrays = [tensor.numpy() for tensor in model_wb.values()]
+        model.w[0] = numpy_arrays[0]
+        model.w[1] = numpy_arrays[2]
+        model.w[2] = numpy_arrays[4]
+        model.b[0] = numpy_arrays[1].reshape(-1, 1)
+        model.b[1] = numpy_arrays[3].reshape(-1, 1)
+        model.b[2] = numpy_arrays[5].reshape(-1, 1)
+
     def relu(x):
-        return [max(0, x_i) for x_i in x]
+        return np.maximum(x, 0)
 
     def relu_dir(x):
         return np.where(x > 0, 1, 0)
 
-    def mse(x, y):
-        return 0.5*np.sum((x-y)**2)
+    def softmax(x):
+        return np.exp(x) / sum(np.exp(x))
+
+    def one_hot(x):
+        encoding = np.zeros((len(x), 10))
+        for i in range(len(x)):
+            encoding[i,x[i]] = 1
+        return encoding.T
+
+    def decode(x):
+        return np.argmax(x, 0)
 
     def crossEntrpyLoss(x, y):
-        return -np.sum(y * np.log(x + 1e-8))
+        return -np.sum(y * np.log(x))
 
     class Model:
-        def __init__(self):
+        def __init__(self, lr=0.1):
             self.layers = (28*28, 16, 16, 10)
-            self.weights = [np.random.rand(self.layers[i], self.layers[i + 1]) for i in range(len(self.layers) - 1)]
-            self.bias = [np.zeros(self.layers[i + 1]) for i in range(len(self.layers) - 1)]
-            self.neuron_values = [np.zeros(i) for i in self.layers]
-            self.pre_activation_values = [np.zeros(i) for i in self.layers]
-            self.lr = 0.01
-
-        def backprop(self, pred, y):
-            dcdw = [0] * len(self.weights)
-            delta = [0] * (len(self.bias)+1)
-            delta[-1] = (pred - y)*relu_dir(self.pre_activation_values[-1])
-
-            for i in range(len(self.weights) - 1, -1, -1):
-                dcdw[i] = np.outer(self.pre_activation_values[i], delta[i+1])
-                delta[i] = (delta[i+1] @ np.array(self.weights[i]).T) * relu_dir(self.pre_activation_values[i])
-
-            for i in range(len(self.weights)):
-                self.weights[i] -= dcdw[i]*self.lr
-                self.bias[i] -= delta[i+1]*self.lr
+            self.w = [np.random.rand(self.layers[i + 1], self.layers[i]) - 0.5 for i in range(len(self.layers) - 1)]
+            self.b = [np.random.rand(self.layers[i + 1], 1) - 0.5 for i in range(len(self.layers) - 1)]
+            self.a = [np.zeros((i, 1)) for i in self.layers]
+            self.z = [np.zeros((i, 1)) for i in self.layers]
+            self.lr = lr
 
         def forward(self, x):
-            self.neuron_values[0] = x
-            for i in range(len(self.weights)):
-                self.pre_activation_values[i+1] = self.neuron_values[i] @ self.weights[i] + self.bias[i]
-                self.neuron_values[i+1] = relu(self.pre_activation_values[i+1])
-            return self.neuron_values[-1]
+            self.a[0] = np.array(x)
+            for i in range(len(self.w) - 1):
+                self.z[i + 1] = self.w[i].dot(self.a[i]) + self.b[i]
+                self.a[i + 1] = relu(self.z[i + 1])
+            self.z[-1] = self.w[-1].dot(self.a[-2]) + self.b[-1]
+            self.a[-1] = softmax(self.z[-1])
+            return self.a[-1]
 
-        def train(self, x, y):
-            for i in range(len(x)):
-                self.backprop(self.forward(x[i]), y[i])
+        def backprop(self, pred, y):
+            m = len(y)
+            y = one_hot(y)
+            dw = [0] * len(self.b)
+            db = [0] * len(self.b)
+            delta = [0] * (len(self.b)+1)
+            delta[-1] = pred - y
+            for i in range(len(self.w) - 1, -1, -1):
+                dw[i] = 1/m * delta[i+1].dot(self.a[i].T)
+                db[i] = 1/m * np.sum(delta[i])
+                delta[i] = self.w[i].T.dot(delta[i + 1]) * relu_dir(self.z[i])
 
-    model = Model()
+            for i in range(len(self.w)):
+                self.w[i] -= self.lr * dw[i]
+                self.b[i] -= self.lr * db[i]
 
-    model_wb = torch.load("pytorch_model.pth")
-    numpy_arrays = [tensor.numpy() for tensor in model_wb.values()]
-    model.weights[0] = numpy_arrays[0].T
-    model.weights[1] = numpy_arrays[2].T
-    model.weights[2] = numpy_arrays[4].T
-    model.bias[0] = numpy_arrays[1]
-    model.bias[1] = numpy_arrays[3]
-    model.bias[2] = numpy_arrays[5]
+        def train(self, x, y, batch_size, iterations=5):
+            for i in range(iterations):
+                for j in range(math.ceil(x.shape[0]/batch_size)):
+                    start = batch_size*j
+                    end = min(batch_size*(j+1), x.shape[0])
+                    self.backprop(self.forward(x[:,start:end]), y[start:end])
+                print("iteration: ", i+1)
 
-    for i in range(len(x_test)):
-        print(model.forward(x_test[i]), " ", y_test[i])
+    x_train = x_train.T
+    x_test = x_test.T
+
+    model = Model(lr=0.01)
+    model.train(x_train, y_train, 64, iterations=100)
+
+    for i in range(50):
+        item = model.forward(x_test[:, i].reshape(-1, 1))
+        print(decode(item), " ", y_test[i], "   loss: ", crossEntrpyLoss(item, one_hot([y_test[i]])))
 
 
 if __name__ == '__main__':
-
     train_data = datasets.MNIST(root='data', train=True, download=True, transform=ToTensor(), )
     test_data = datasets.MNIST(root='data', train=False, download=True, transform=ToTensor(), )
     train_dataloader = DataLoader(train_data, batch_size=len(train_data))
@@ -189,10 +213,12 @@ if __name__ == '__main__':
     x_train_np = X.numpy()
     y_train_np = y.numpy()
     x_train_np = [item.flatten() for item in x_train_np]
+    x_train_np = np.array(x_train_np)
     X_t, y_t = next(iter(test_dataloader))
     x_test_np = X_t.numpy()
     y_test_np = y_t.numpy()
     x_test_np = [item.flatten() for item in x_test_np]
+    x_test_np = np.array(x_test_np)
 
     batch_size = 64
     train_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
