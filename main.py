@@ -1,5 +1,4 @@
 from sklearn.neural_network import MLPClassifier
-import joblib
 
 import torch
 from torch import nn
@@ -9,19 +8,21 @@ from torchvision.transforms import ToTensor
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import math
+import pickle
+
 
 def sklearnMLP(x_train, y_train, x_test, y_test, training=True):
-    # reset default parameters for better comparison with other implementations
     clf = MLPClassifier(solver='sgd', alpha=0, hidden_layer_sizes=(16, 16), batch_size=64,
                         learning_rate_init=0.01, max_iter=5, shuffle=False, verbose=True, momentum=0)
 
     if training:
         clf.fit(x_train, y_train)
-        joblib.dump(clf, "sklearn_model.pkl")
+        with open("sklearn_model.pkl", 'wb') as file:
+            pickle.dump(clf, file, protocol=5)
     else:
-        clf = joblib.load("sklearn_model.pkl")
+        with open("sklearn_model.pkl", "rb") as file:
+            clf = pickle.load(file)
     print(f'sklearnMLP accuracy: {clf.score(x_test, y_test)}')
 
 
@@ -120,7 +121,7 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
 
 
 def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
-    def load_weights(model):
+    def load_pytorch_weights(model):
         model_wb = torch.load("pytorch_model.pth")
         numpy_arrays = [tensor.numpy() for tensor in model_wb.values()]
         model.w[0] = numpy_arrays[0]
@@ -142,7 +143,7 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
     def one_hot(x):
         encoding = np.zeros((len(x), 10))
         for i in range(len(x)):
-            encoding[i,x[i]] = 1
+            encoding[i, x[i]] = 1
         return encoding.T
 
     def decode(x):
@@ -190,18 +191,36 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
                 for j in range(math.ceil(x.shape[0]/batch_size)):
                     start = batch_size*j
                     end = min(batch_size*(j+1), x.shape[0])
-                    self.backprop(self.forward(x[:,start:end]), y[start:end])
+                    self.backprop(self.forward(x[:, start:end]), y[start:end])
                 print("iteration: ", i+1)
 
     x_train = x_train.T
     x_test = x_test.T
 
     model = Model(lr=0.01)
-    model.train(x_train, y_train, 64, iterations=100)
 
-    for i in range(50):
+    if training:
+        model.train(x_train, y_train, 64, iterations=500)
+        with open('from_scratch_model_w.pkl', 'wb') as file:
+            pickle.dump(model.w, file)
+        with open('from_scratch_model_b.pkl', 'wb') as file:
+            pickle.dump(model.b, file)
+    else:
+        with open('from_scratch_model_w.pkl', 'rb') as file:
+            model.w = pickle.load(file)
+        with open('from_scratch_model_b.pkl', 'rb') as file:
+            model.b = pickle.load(file)
+
+    test_loss, correct = 0, 0
+    size = len(y_test)
+    for i in range(size):
         item = model.forward(x_test[:, i].reshape(-1, 1))
-        print(decode(item), " ", y_test[i], "   loss: ", crossEntrpyLoss(item, one_hot([y_test[i]])))
+        if decode(item)[0] == y_test[i]:
+            correct += 1
+        test_loss += crossEntrpyLoss(item, one_hot([y_test[i]]))
+    test_loss /= size
+    correct /= size
+    print(f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
 
 if __name__ == '__main__':
