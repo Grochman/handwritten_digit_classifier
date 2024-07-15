@@ -11,10 +11,12 @@ import numpy as np
 import math
 import pickle
 
+from scipy.ndimage import shift, affine_transform
+
 
 def sklearnMLP(x_train, y_train, x_test, y_test, training=True):
-    clf = MLPClassifier(solver='sgd', alpha=0, hidden_layer_sizes=(16, 16), batch_size=64,
-                        learning_rate_init=0.01, max_iter=5, shuffle=False, verbose=True, momentum=0)
+    clf = MLPClassifier(solver='sgd', alpha=0, hidden_layer_sizes=(256, 64), batch_size=64,
+                        learning_rate_init=0.01, max_iter=20, shuffle=False, verbose=True, momentum=0)
 
     if training:
         clf.fit(x_train, y_train)
@@ -24,6 +26,7 @@ def sklearnMLP(x_train, y_train, x_test, y_test, training=True):
         with open("sklearn_model.pkl", "rb") as file:
             clf = pickle.load(file)
     print(f'sklearnMLP accuracy: {clf.score(x_test, y_test)}')
+    print(clf.loss_)
 
 
 def pytorchMLP(train_dataloader, test_dataloader, training=True):
@@ -42,11 +45,11 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
             super().__init__()
             self.flatten = nn.Flatten()
             self.linear_relu_stack = nn.Sequential(
-                nn.Linear(28 * 28, 16),
+                nn.Linear(28 * 28, 256),
                 nn.ReLU(),
-                nn.Linear(16, 16),
+                nn.Linear(256, 64),
                 nn.ReLU(),
-                nn.Linear(16, 10)
+                nn.Linear(64, 10)
             )
 
         def forward(self, x):
@@ -138,7 +141,9 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
         return np.where(x > 0, 1, 0)
 
     def softmax(x):
-        return np.exp(x) / sum(np.exp(x))
+        shift_x = x - np.max(x)
+        exp_shift_x = np.exp(shift_x)
+        return exp_shift_x / np.sum(exp_shift_x)
 
     def one_hot(x):
         encoding = np.zeros((len(x), 10))
@@ -152,9 +157,28 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
     def crossEntrpyLoss(x, y):
         return -np.sum(y * np.log(x))
 
+    def train_stats():
+        test_loss, test_correct, train_loss, train_correct = 0, 0, 0, 0
+        size = len(y_test)
+        for i in range(size):
+            item = model.forward(x_test[:, i].reshape(-1, 1))
+            item2 = model.forward(x_train[:, i].reshape(-1, 1))
+            if decode(item)[0] == y_test[i]:
+                test_correct += 1
+            test_loss += crossEntrpyLoss(item, one_hot([y_test[i]]))
+            if decode(item2)[0] == y_train[i]:
+                train_correct += 1
+            train_loss += crossEntrpyLoss(item2, one_hot([y_train[i]]))
+        test_loss /= size
+        test_correct /= size
+        train_loss /= size
+        train_correct /= size
+        print(f"Test Error: \n Accuracy: {(100 * test_correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+        print(f"Train Error: \n Accuracy: {(100 * train_correct):>0.1f}%, Avg loss: {train_loss:>8f} \n")
+
     class Model:
-        def __init__(self, lr=0.1):
-            self.layers = (28*28, 16, 16, 10)
+        def __init__(self, lr=0.01):
+            self.layers = (28*28, 200, 10)
             self.w = [np.random.rand(self.layers[i + 1], self.layers[i]) - 0.5 for i in range(len(self.layers) - 1)]
             self.b = [np.random.rand(self.layers[i + 1], 1) - 0.5 for i in range(len(self.layers) - 1)]
             self.a = [np.zeros((i, 1)) for i in self.layers]
@@ -192,7 +216,10 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
                     start = batch_size*j
                     end = min(batch_size*(j+1), x.shape[0])
                     self.backprop(self.forward(x[:, start:end]), y[start:end])
-                print("iteration: ", i+1)
+
+                print("iteration: ", i)
+                train_stats()
+
 
     x_train = x_train.T
     x_test = x_test.T
@@ -200,7 +227,7 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
     model = Model(lr=0.01)
 
     if training:
-        model.train(x_train, y_train, 64, iterations=500)
+        model.train(x_train, y_train, 1, iterations=20)
         with open('from_scratch_model_w.pkl', 'wb') as file:
             pickle.dump(model.w, file)
         with open('from_scratch_model_b.pkl', 'wb') as file:
@@ -223,7 +250,35 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
     print(f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
 
+def dataTransformation():
+    dimentions = 28
+    max_translation = 0.4 * dimentions
+    max_angle = 30
+    max_scale = 0.2
+    center = tuple(np.array(x_train_np[0, 0].shape) / 2)
+    print("preprocessing data")
+    for i in range(60000):
+        angle = (np.random.rand() - 0.5) * max_angle * 2
+        # scale = (1 + np.random.rand() * max_scale, 1 + np.random.rand() * max_scale)
+        translate = ((np.random.rand() - 0.5) * max_translation, (np.random.rand() - 0.5) * max_translation)
+
+        rotate_matrix = np.array([[np.cos(np.radians(angle)), -np.sin(np.radians(angle))],
+                                  [np.sin(np.radians(angle)), np.cos(np.radians(angle))]])
+        offset = center - np.dot(rotate_matrix, center)
+        x_train_np[i, 0] = affine_transform(x_train_np[i, 0], rotate_matrix, offset=offset, order=1, mode='nearest')
+
+        x_train_np[i, 0] = shift(x_train_np[i, 0], translate, order=1, mode='nearest')
+
+        # scale_matrix = np.diag(scale)
+        # offset = center - np.dot(scale_matrix, center)
+        # transformed = affine_transform(transformed, scale_matrix, offset=offset, order=1, mode='nearest')
+
+        x_train_np[i, 0][x_train_np[i, 0] < 0.5] = 0
+        x_train_np[i, 0][x_train_np[i, 0] > 0] = 1
+
+
 if __name__ == '__main__':
+    print("loading data")
     train_data = datasets.MNIST(root='data', train=True, download=True, transform=ToTensor(), )
     test_data = datasets.MNIST(root='data', train=False, download=True, transform=ToTensor(), )
     train_dataloader = DataLoader(train_data, batch_size=len(train_data))
@@ -231,18 +286,25 @@ if __name__ == '__main__':
     X, y = next(iter(train_dataloader))
     x_train_np = X.numpy()
     y_train_np = y.numpy()
+
+    dataTransformation()
+
     x_train_np = [item.flatten() for item in x_train_np]
     x_train_np = np.array(x_train_np)
+    x_train_np[x_train_np > 0] = 1
+
     X_t, y_t = next(iter(test_dataloader))
     x_test_np = X_t.numpy()
     y_test_np = y_t.numpy()
     x_test_np = [item.flatten() for item in x_test_np]
     x_test_np = np.array(x_test_np)
+    x_test_np[x_test_np > 0] = 1
+
 
     batch_size = 64
     train_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
     test_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
 
     # sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
-    # pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=True)
-    fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
+    # pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=False)
+    # fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
