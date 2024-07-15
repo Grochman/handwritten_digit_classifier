@@ -20,6 +20,7 @@ with open("sklearn_model.pkl", "rb") as file:
 model = Model()
 model.load()
 
+
 def getScreenData():
     area = pygame.Rect(0, 0, mlp_resolution[0], mlp_resolution[1])
     low_res = pygame.transform.scale(screen, mlp_resolution)
@@ -33,9 +34,9 @@ def getScreenData():
 
 def detect(data):
     print("sklearn: ",clf.predict([data]))
-    # data = data[:, np.newaxis]
-    # item = model.forward(data)
-    # print("my implementation: ", decode(item))
+    data = data[:, np.newaxis]
+    item = model.forward(data)
+    print("my implementation: ", decode(item))
 
 
 def drawSquare(screen, x, y):

@@ -118,22 +118,9 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
             pred = model(x)
             predicted, actual = classes[pred[0].argmax(0)], classes[y]
             print(f'First predicted element: "{predicted}", Actual: "{actual}"')
-            img = x.squeeze()
-            plt.imshow(img, cmap="gray")
-            plt.show()
 
 
 def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
-    def load_pytorch_weights(model):
-        model_wb = torch.load("pytorch_model.pth")
-        numpy_arrays = [tensor.numpy() for tensor in model_wb.values()]
-        model.w[0] = numpy_arrays[0]
-        model.w[1] = numpy_arrays[2]
-        model.w[2] = numpy_arrays[4]
-        model.b[0] = numpy_arrays[1].reshape(-1, 1)
-        model.b[1] = numpy_arrays[3].reshape(-1, 1)
-        model.b[2] = numpy_arrays[5].reshape(-1, 1)
-
     def relu(x):
         return np.maximum(x, 0)
 
@@ -247,14 +234,14 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
     print(f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
 
-def dataTransformation():
-    dimentions = 28
-    max_translation = 0.4 * dimentions
+def dataTransformation(data):
+    dimensions = 28
+    max_translation = 0.4 * dimensions
     max_angle = 30
     max_scale = 0.2
-    center = tuple(np.array(x_train_np[0, 0].shape) / 2)
+    center = tuple(np.array(data[0, 0].shape) / 2)
     print("preprocessing data")
-    for i in range(60000):
+    for i in range(data.shape[1]):
         angle = (np.random.rand() - 0.5) * max_angle * 2
         # scale = (1 + np.random.rand() * max_scale, 1 + np.random.rand() * max_scale)
         translate = ((np.random.rand() - 0.5) * max_translation, (np.random.rand() - 0.5) * max_translation)
@@ -262,16 +249,17 @@ def dataTransformation():
         rotate_matrix = np.array([[np.cos(np.radians(angle)), -np.sin(np.radians(angle))],
                                   [np.sin(np.radians(angle)), np.cos(np.radians(angle))]])
         offset = center - np.dot(rotate_matrix, center)
-        x_train_np[i, 0] = affine_transform(x_train_np[i, 0], rotate_matrix, offset=offset, order=1, mode='nearest')
+        data[i, 0] = affine_transform(data[i, 0], rotate_matrix, offset=offset, order=1, mode='nearest')
 
-        x_train_np[i, 0] = shift(x_train_np[i, 0], translate, order=1, mode='nearest')
+        data[i, 0] = shift(data[i, 0], translate, order=1, mode='nearest')
 
         # scale_matrix = np.diag(scale)
         # offset = center - np.dot(scale_matrix, center)
         # transformed = affine_transform(transformed, scale_matrix, offset=offset, order=1, mode='nearest')
 
-        x_train_np[i, 0][x_train_np[i, 0] < 0.5] = 0
-        x_train_np[i, 0][x_train_np[i, 0] > 0] = 1
+        data[i, 0][data[i, 0] < 0.5] = 0
+        data[i, 0][data[i, 0] > 0] = 1
+    return data
 
 
 if __name__ == '__main__':
@@ -284,7 +272,7 @@ if __name__ == '__main__':
     x_train_np = X.numpy()
     y_train_np = y.numpy()
 
-    dataTransformation()
+    x_train_np = dataTransformation(x_train_np)
 
     x_train_np = [item.flatten() for item in x_train_np]
     x_train_np = np.array(x_train_np)
@@ -293,6 +281,9 @@ if __name__ == '__main__':
     X_t, y_t = next(iter(test_dataloader))
     x_test_np = X_t.numpy()
     y_test_np = y_t.numpy()
+
+    x_test_np = dataTransformation(x_test_np)
+
     x_test_np = [item.flatten() for item in x_test_np]
     x_test_np = np.array(x_test_np)
     x_test_np[x_test_np > 0] = 1
@@ -301,6 +292,6 @@ if __name__ == '__main__':
     train_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
     test_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
 
-    # sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
-    # pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=False)
-    fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
+    sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
+    pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=False)
+    fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
