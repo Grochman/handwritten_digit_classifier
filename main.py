@@ -141,9 +141,7 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
         return np.where(x > 0, 1, 0)
 
     def softmax(x):
-        shift_x = x - np.max(x)
-        exp_shift_x = np.exp(shift_x)
-        return exp_shift_x / np.sum(exp_shift_x)
+        return np.exp(x) / sum(np.exp(x))
 
     def one_hot(x):
         encoding = np.zeros((len(x), 10))
@@ -178,7 +176,7 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
 
     class Model:
         def __init__(self, lr=0.01):
-            self.layers = (28*28, 200, 10)
+            self.layers = (28*28, 256, 64, 10)
             self.w = [np.random.rand(self.layers[i + 1], self.layers[i]) - 0.5 for i in range(len(self.layers) - 1)]
             self.b = [np.random.rand(self.layers[i + 1], 1) - 0.5 for i in range(len(self.layers) - 1)]
             self.a = [np.zeros((i, 1)) for i in self.layers]
@@ -212,11 +210,10 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
 
         def train(self, x, y, batch_size, iterations=5):
             for i in range(iterations):
-                for j in range(math.ceil(x.shape[0]/batch_size)):
+                for j in range(math.ceil(x.shape[1]/batch_size)):
                     start = batch_size*j
-                    end = min(batch_size*(j+1), x.shape[0])
+                    end = min(batch_size*(j+1), x.shape[1])
                     self.backprop(self.forward(x[:, start:end]), y[start:end])
-
                 print("iteration: ", i)
                 train_stats()
 
@@ -227,7 +224,7 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
     model = Model(lr=0.01)
 
     if training:
-        model.train(x_train, y_train, 1, iterations=20)
+        model.train(x_train, y_train, 64, iterations=20)
         with open('from_scratch_model_w.pkl', 'wb') as file:
             pickle.dump(model.w, file)
         with open('from_scratch_model_b.pkl', 'wb') as file:
@@ -300,11 +297,10 @@ if __name__ == '__main__':
     x_test_np = np.array(x_test_np)
     x_test_np[x_test_np > 0] = 1
 
-
     batch_size = 64
     train_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
     test_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
 
-    # sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
+    # sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
     # pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=False)
-    # fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
+    fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
