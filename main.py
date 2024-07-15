@@ -238,7 +238,7 @@ def dataTransformation(data):
     dimensions = 28
     max_translation = 0.4 * dimensions
     max_angle = 30
-    max_scale = 0.2
+    # max_scale = 0.2
     center = tuple(np.array(data[0, 0].shape) / 2)
     print("preprocessing data")
     for i in range(data.shape[1]):
@@ -292,6 +292,6 @@ if __name__ == '__main__':
     train_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
     test_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
 
-    sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
+    # sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
     pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=False)
-    fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
+    # fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)

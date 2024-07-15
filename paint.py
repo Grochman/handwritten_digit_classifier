@@ -1,24 +1,26 @@
 import pygame
 import numpy as np
-from onlyFormScratchMLP import Model
-from onlyFormScratchMLP import decode
-from sklearn.neural_network import MLPClassifier
+from models import FromScratchModel
+from models import decode
+from models import PytorchModel
 import pickle
+import torch
 
 WHITE = (255, 255, 255)
 screen_dimensions = (500, 500)
-mlp_resolution = (28,28)
+mlp_resolution = (28, 28)
 screen = pygame.display.set_mode(screen_dimensions)
 isPressed = False
 running = True
-clf = MLPClassifier(solver='sgd', alpha=0, hidden_layer_sizes=(16, 16), batch_size=64,
-                        learning_rate_init=0.01, max_iter=5, shuffle=False, verbose=True, momentum=0)
+
+pytorch_model = PytorchModel().to("cpu")
+pytorch_model.load_state_dict(torch.load("pytorch_model.pth"))
 
 with open("sklearn_model.pkl", "rb") as file:
-    clf = pickle.load(file)
+    sklearn_model = pickle.load(file)
 
-model = Model()
-model.load()
+my_model = FromScratchModel()
+my_model.load()
 
 
 def getScreenData():
@@ -27,21 +29,26 @@ def getScreenData():
     sub_surface = low_res.subsurface(area)
     pixel_data = pygame.surfarray.array2d(sub_surface)
     pixel_data = pixel_data.T
-    pixel_data[pixel_data>0] = 1
-    pixel_data = pixel_data.flatten()
+    pixel_data[pixel_data > 0] = 1.0
     return pixel_data
 
 
 def detect(data):
-    print("sklearn: ",clf.predict([data]))
-    data = data[:, np.newaxis]
-    item = model.forward(data)
-    print("my implementation: ", decode(item))
+    data_flat = data.flatten()
+    print("sklearn: ", sklearn_model.predict([data_flat])[0])
+
+    float_data = data.astype(np.float32)
+    tensor_data = torch.tensor(float_data.reshape(1, 28, 28))
+    print("pytorch: ", pytorch_model.predict(tensor_data, "cpu"))
+
+    data_flat = data_flat[:, np.newaxis]
+    item = my_model.forward(data_flat)
+    print("my implementation: ", decode(item)[0])
 
 
 def drawSquare(screen, x, y):
     square_size = 40
-    pygame.draw.rect(screen, WHITE, (x-square_size/2, y-square_size/2, square_size, square_size))
+    pygame.draw.rect(screen, WHITE, (x - square_size / 2, y - square_size / 2, square_size, square_size))
 
 
 while running:
@@ -56,9 +63,8 @@ while running:
         elif event.type == pygame.MOUSEBUTTONUP:
             isPressed = False
         elif event.type == pygame.MOUSEMOTION and isPressed:
-            (x, y) = pygame.mouse.get_pos()  # returns the position of mouse cursor
+            (x, y) = pygame.mouse.get_pos()
             drawSquare(screen, x, y)
         elif event.type == pygame.QUIT:
             running = False
     pygame.display.flip()
-
