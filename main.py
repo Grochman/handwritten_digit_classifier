@@ -2,7 +2,7 @@ from sklearn.neural_network import MLPClassifier
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from torchvision import datasets
 from torchvision.transforms import ToTensor
 
@@ -94,7 +94,7 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
     if training:
-        epochs = 5
+        epochs = 20
         for t in range(epochs):
             print(f"Epoch {t + 1}\n-------------------------------")
             train(train_dataloader, model, loss_fn, optimizer)
@@ -241,7 +241,7 @@ def dataTransformation(data):
     # max_scale = 0.2
     center = tuple(np.array(data[0, 0].shape) / 2)
     print("preprocessing data")
-    for i in range(data.shape[1]):
+    for i in range(data.shape[0]):
         angle = (np.random.rand() - 0.5) * max_angle * 2
         # scale = (1 + np.random.rand() * max_scale, 1 + np.random.rand() * max_scale)
         translate = ((np.random.rand() - 0.5) * max_translation, (np.random.rand() - 0.5) * max_translation)
@@ -289,9 +289,15 @@ if __name__ == '__main__':
     x_test_np[x_test_np > 0] = 1
 
     batch_size = 64
-    train_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
-    test_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
+    # train_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
+    # test_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
+    tensor_x_train = torch.tensor(x_train_np, dtype=torch.float32)
+    tensor_y_train = torch.tensor(y_train_np, dtype=torch.long)
+    tensor_x_test = torch.tensor(x_test_np, dtype=torch.float32)
+    tensor_y_test = torch.tensor(y_test_np, dtype=torch.long)
+    train_dataloader_batched = DataLoader(TensorDataset(tensor_x_train, tensor_y_train), batch_size=batch_size)
+    test_dataloader_batched = DataLoader(TensorDataset(tensor_x_test, tensor_y_test), batch_size=batch_size)
 
-    # sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
-    pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=False)
-    # fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=False)
+    # sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
+    # pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=True)
+    fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
