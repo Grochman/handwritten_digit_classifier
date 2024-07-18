@@ -6,4 +6,4 @@ Project consists of implementations of a simple mlp using:
 - pytorch
 - from scratch
 
-Each neural net has layers of 28*28, 16, 16, 10 neurons and learning rate of 0.01
+Original MNIST dataset is modified (random rotation, translation and scaling) for better recognitions of unprocessed data.
