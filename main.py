@@ -15,8 +15,8 @@ from scipy.ndimage import shift, affine_transform
 
 
 def sklearnMLP(x_train, y_train, x_test, y_test, training=True):
-    clf = MLPClassifier(solver='sgd', alpha=0, hidden_layer_sizes=(256, 64), batch_size=64,
-                        learning_rate_init=0.01, max_iter=20, shuffle=False, verbose=True, momentum=0)
+    clf = MLPClassifier(solver='sgd', alpha=0, hidden_layer_sizes=(200), batch_size=32,
+                        learning_rate_init=0.05, max_iter=20, shuffle=False, verbose=True, momentum=0)
 
     if training:
         clf.fit(x_train, y_train)
@@ -45,11 +45,9 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
             super().__init__()
             self.flatten = nn.Flatten()
             self.linear_relu_stack = nn.Sequential(
-                nn.Linear(28 * 28, 256),
+                nn.Linear(28 * 28, 200),
                 nn.ReLU(),
-                nn.Linear(256, 64),
-                nn.ReLU(),
-                nn.Linear(64, 10)
+                nn.Linear(200, 10)
             )
 
         def forward(self, x):
@@ -91,7 +89,7 @@ def pytorchMLP(train_dataloader, test_dataloader, training=True):
 
     model = NeuralNetwork().to(device)
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.05)
 
     if training:
         epochs = 20
@@ -163,7 +161,7 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
 
     class Model:
         def __init__(self, lr=0.01):
-            self.layers = (28*28, 256, 64, 10)
+            self.layers = (28*28, 200, 10)
             self.w = [np.random.rand(self.layers[i + 1], self.layers[i]) - 0.5 for i in range(len(self.layers) - 1)]
             self.b = [np.random.rand(self.layers[i + 1], 1) - 0.5 for i in range(len(self.layers) - 1)]
             self.a = [np.zeros((i, 1)) for i in self.layers]
@@ -210,7 +208,7 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
     model = Model(lr=0.05)
 
     if training:
-        model.train(x_train, y_train, 64, iterations=20)
+        model.train(x_train, y_train, 32, iterations=20)
         with open('from_scratch_model_w.pkl', 'wb') as file:
             pickle.dump(model.w, file)
         with open('from_scratch_model_b.pkl', 'wb') as file:
@@ -267,7 +265,7 @@ def dataTransformation(data, noise=True, two_tone=True):
                 if np.random.rand() < 0.1:
                     x = int(np.random.rand() * 28 // 1)
                     y = int(np.random.rand() * 28 // 1)
-                    data[i, 0, x, y] = 1
+                    data[i, 0, x, y] = np.random.rand()
     return data
 
 
@@ -295,7 +293,7 @@ if __name__ == '__main__':
     x_test_np = [item.flatten() for item in x_test_np]
     x_test_np = np.array(x_test_np)
 
-    batch_size = 64
+    batch_size = 32
     tensor_x_train = torch.tensor(x_train_np, dtype=torch.float32)
     tensor_y_train = torch.tensor(y_train_np, dtype=torch.long)
     tensor_x_test = torch.tensor(x_test_np, dtype=torch.float32)
@@ -303,6 +301,6 @@ if __name__ == '__main__':
     train_dataloader_batched = DataLoader(TensorDataset(tensor_x_train, tensor_y_train), batch_size=batch_size)
     test_dataloader_batched = DataLoader(TensorDataset(tensor_x_test, tensor_y_test), batch_size=batch_size)
 
-    sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
-    pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=True)
+    #sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
+    #pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=True)
     fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)

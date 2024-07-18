@@ -35,7 +35,7 @@ def crossEntrpyLoss(x, y):
 
 class FromScratchModel:
     def __init__(self, lr=0.1):
-        self.layers = (28 * 28, 256, 64, 10)
+        self.layers = (28 * 28, 200, 10)
         self.w = [np.random.rand(self.layers[i + 1], self.layers[i]) - 0.5 for i in range(len(self.layers) - 1)]
         self.b = [np.random.rand(self.layers[i + 1], 1) - 0.5 for i in range(len(self.layers) - 1)]
         self.a = [np.zeros((i, 1)) for i in self.layers]
@@ -97,11 +97,9 @@ class PytorchModel(nn.Module):
         super().__init__()
         self.flatten = nn.Flatten()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28 * 28, 256),
+            nn.Linear(28 * 28, 200),
             nn.ReLU(),
-            nn.Linear(256, 64),
-            nn.ReLU(),
-            nn.Linear(64, 10)
+            nn.Linear(200, 10)
         )
 
     def forward(self, x):
