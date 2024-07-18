@@ -204,11 +204,10 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
                 print("iteration: ", i)
                 train_stats()
 
-
     x_train = x_train.T
     x_test = x_test.T
 
-    model = Model(lr=0.01)
+    model = Model(lr=0.05)
 
     if training:
         model.train(x_train, y_train, 64, iterations=20)
@@ -234,16 +233,17 @@ def fromScratchMLP(x_train, y_train, x_test, y_test, training=True):
     print(f"Test Error: \n Accuracy: {(100 * correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
 
-def dataTransformation(data):
+def dataTransformation(data, noise=True, two_tone=True):
     dimensions = 28
     max_translation = 0.4 * dimensions
     max_angle = 30
-    # max_scale = 0.2
+    max_scale = 0.4
     center = tuple(np.array(data[0, 0].shape) / 2)
     print("preprocessing data")
     for i in range(data.shape[0]):
         angle = (np.random.rand() - 0.5) * max_angle * 2
-        # scale = (1 + np.random.rand() * max_scale, 1 + np.random.rand() * max_scale)
+        s = 1 + (np.random.rand() - 0.5) * max_scale
+        scale = (s, s)
         translate = ((np.random.rand() - 0.5) * max_translation, (np.random.rand() - 0.5) * max_translation)
 
         rotate_matrix = np.array([[np.cos(np.radians(angle)), -np.sin(np.radians(angle))],
@@ -251,14 +251,23 @@ def dataTransformation(data):
         offset = center - np.dot(rotate_matrix, center)
         data[i, 0] = affine_transform(data[i, 0], rotate_matrix, offset=offset, order=1, mode='nearest')
 
+        scale_matrix = np.diag(scale)
+        offset = center - np.dot(scale_matrix, center)
+        data[i, 0] = affine_transform(data[i, 0], scale_matrix, offset=offset, order=1, mode='nearest')
+
         data[i, 0] = shift(data[i, 0], translate, order=1, mode='nearest')
 
-        # scale_matrix = np.diag(scale)
-        # offset = center - np.dot(scale_matrix, center)
-        # transformed = affine_transform(transformed, scale_matrix, offset=offset, order=1, mode='nearest')
+    if two_tone:
+        data[data < 0.5] = 0
+        data[data > 0] = 1
 
-        data[i, 0][data[i, 0] < 0.5] = 0
-        data[i, 0][data[i, 0] > 0] = 1
+    if noise:
+        for i in range(data.shape[0]):
+            for _ in range(10):
+                if np.random.rand() < 0.1:
+                    x = int(np.random.rand() * 28 // 1)
+                    y = int(np.random.rand() * 28 // 1)
+                    data[i, 0, x, y] = 1
     return data
 
 
@@ -276,7 +285,6 @@ if __name__ == '__main__':
 
     x_train_np = [item.flatten() for item in x_train_np]
     x_train_np = np.array(x_train_np)
-    x_train_np[x_train_np > 0] = 1
 
     X_t, y_t = next(iter(test_dataloader))
     x_test_np = X_t.numpy()
@@ -286,11 +294,8 @@ if __name__ == '__main__':
 
     x_test_np = [item.flatten() for item in x_test_np]
     x_test_np = np.array(x_test_np)
-    x_test_np[x_test_np > 0] = 1
 
     batch_size = 64
-    # train_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
-    # test_dataloader_batched = DataLoader(train_data, batch_size=batch_size)
     tensor_x_train = torch.tensor(x_train_np, dtype=torch.float32)
     tensor_y_train = torch.tensor(y_train_np, dtype=torch.long)
     tensor_x_test = torch.tensor(x_test_np, dtype=torch.float32)
@@ -298,6 +303,6 @@ if __name__ == '__main__':
     train_dataloader_batched = DataLoader(TensorDataset(tensor_x_train, tensor_y_train), batch_size=batch_size)
     test_dataloader_batched = DataLoader(TensorDataset(tensor_x_test, tensor_y_test), batch_size=batch_size)
 
-    # sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
-    # pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=True)
+    sklearnMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
+    pytorchMLP(train_dataloader_batched, test_dataloader_batched, training=True)
     fromScratchMLP(x_train_np, y_train_np, x_test_np, y_test_np, training=True)
