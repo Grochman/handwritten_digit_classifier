@@ -281,7 +281,7 @@ if __name__ == '__main__':
     x_train_np = X.numpy()
     y_train_np = y.numpy()
 
-    x_train_np = dataTransformation(x_train_np)
+    x_train_np = dataTransformation(x_train_np, two_tone=False)
 
     x_train_np = [item.flatten() for item in x_train_np]
     x_train_np = np.array(x_train_np)
@@ -290,7 +290,7 @@ if __name__ == '__main__':
     x_test_np = X_t.numpy()
     y_test_np = y_t.numpy()
 
-    x_test_np = dataTransformation(x_test_np)
+    x_test_np = dataTransformation(x_test_np, two_tone=False)
 
     x_test_np = [item.flatten() for item in x_test_np]
     x_test_np = np.array(x_test_np)
