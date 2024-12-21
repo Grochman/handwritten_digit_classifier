@@ -1,7 +1,7 @@
-Handwritten digit (MNIST dataset) classifier using neutalnets.
+Handwritten digit (MNIST dataset) classifier using MLP neuralnets.
 
 
-Project consists of implementations of a simple mlp using:
+Implementations of a simple mlp using:
 - scikit-learn (sklearn)
 - pytorch
 - from scratch
